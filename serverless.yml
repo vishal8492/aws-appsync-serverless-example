@@ -1,0 +1,69 @@
+#Example from https://www.serverless.com/blog/building-chat-appliation-aws-appsync-serverless
+service: appsync-messages
+plugins:
+  - serverless-appsync-plugin
+provider:
+  name: aws
+  runtime: go1.x
+  region: ap-southeast-1
+  deploymentBucket:
+    name: appsync-messages-deployment-bucket
+    serverSideEncryption: AES256
+package:
+  exclude:
+    - ./**
+  include:
+    - ./bin/**
+custom:
+  stage: dev
+  output:
+    file: ./front/src/stack.json
+  appSync:
+    name: ${self:service}-${self:custom.stage}
+    authenticationType: API_KEY
+    logConfig:
+      level: ALL # Logging Level: NONE | ERROR | ALL
+      excludeVerboseContent: false
+    # ... boring authentication details.
+    mappingTemplates:
+      # Here we show AppSync how to resolve our GraphQL queries.
+      - dataSource: Messages
+        type: Mutation
+        field: createMessage
+        request: "createMessage-request-mapping-template.txt"
+        response: "createMessage-response-mapping-template.txt"
+      - dataSource: Messages
+        type: Query
+        field: getMessage
+        request: "getMessage-request-mapping-template.txt"
+        response: "getMessage-response-mapping-template.txt"
+    schema: schema.graphql
+    dataSources:
+      # Here we describe the DynamoDB table we’ll be using as the data source.
+      - type: AMAZON_DYNAMODB
+        name: Messages
+        description: Messages Table
+        config:
+          tableName: { Ref: MessagesAppSyncTable }
+          iamRoleStatements:
+            - Effect: "Allow"
+              Action:
+                - "dynamodb:*"
+              Resource:
+                - "arn:aws:dynamodb:ap-southeast-1:${aws:accountId}:table/messages-app-sync"
+                - "arn:aws:dynamodb:ap-southeast-1:${aws:accountId}:table/messages-app-sync/*"
+resources: # CloudFormation template syntax from here on.
+  Resources:
+    MessagesAppSyncTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: messages-app-sync
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
